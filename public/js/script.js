@@ -136,12 +136,32 @@ $(document).ready(function () {
             });
         }
     });
+ function sendMessage(message) {
+                    let url = "{{ route('message.store') }}";
+                    let form = $(this);
+                    let formData = new FormData();
+                    let token = "{{ csrf_token() }}";
+                    formData.append('content', message);
+                    formData.append('_token', token);
+                    formData.append('receiver_id', receiver_id);
+                    $.ajax({
+                        url: url,
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        dataType: 'JSON',
+                        success: function(response) {
+                            if (response.success) {
+                                console.log(response.data);
+                            }
+                        }
+                    });
+                } //end send message
 
     socket.on('new_broadcasting', (data) => {
-
 			$('.box'+data.from+' .broadcast').html('<span style="font-size:10px;float:left">'+data.username+'</span> <img class="pull-right" src="'+typingurl+'" />');
     });
-
 	function displayChatBox(){
 	    i = 270 ; // start position
 		j = 260;  //next position
@@ -157,8 +177,4 @@ $(document).ready(function () {
 		   }
         });
 	}
-
-
-
-
 });
