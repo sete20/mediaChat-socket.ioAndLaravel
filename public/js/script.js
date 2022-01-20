@@ -11,30 +11,25 @@ function status_user(class1,class2)
 
 $(document).ready(function () {
     var mylist = [];
-   var arr = [];
+
      $('.user').each(function(){
 		var uid = $(this).attr('uid');
 		mylist.push(uid);
      });
     ///
-    var user_status = $('.status').filter('input[name="status"]:checked').val();
+     var my_status = $('.current_status').attr('status');
+    // var user_status = $('.status').filter('input[name="status"]:checked').val();
     var socket = io.connect('http://localhost:5000',
         {
-            query:'user_id='+user_id+'&username='+username+'&mylist='+mylist.join(',')+'&status='+user_status
+            query:'user_id='+user_id+'&username='+username+'&mylist='+mylist.join(',')+'&status='+my_status
         });
-    socket.on('is_online',function(data){
+    var array_emits = ['is_online', 'iam_online', 'iam_offline', 'new_status'];
+    $.each(array_emits, function (k,v) {
+    socket.on(v,function(data){
    			status_user(data.user_id,data.status);
    	});
-   	socket.on('iam_online',function(data){
-	   		status_user(data.user_id,data.status);
-   	});
-   	socket.on('iam_offline',function(data){
-	   		 status_user(data.user_id,data.status);
-   	});
-    socket.on('new_status', function (data) {
-        console.log(data);
-	   		 status_user(data.user_id,data.status);
-   	});
+    });
+
 	socket.on('connect',function(data){
 			$('.user').each(function(){
                 var uid = $(this).attr('uid');
@@ -44,12 +39,26 @@ $(document).ready(function () {
 			});
     });
 
-    $(document).on('change', 'input[name="status"]', function () {
-        var user_status = $('.status').filter('input[name="status"]:checked').val();
-        socket.emit('change_status',  {
-            status:user_status
-        });
-    });
+		$(document).on('click','.status',function(){
+			var status_user = $(this).attr('status');
+			$('.current_status').attr('status',status_user);
+
+			if(status_user == 'dnd')
+			{
+			 $('.current_status').text("don't disturb");
+			}else if(status_user == 'bys'){
+			 $('.current_status').text('Busy');
+			}else{
+			 $('.current_status').text(status_user);
+			}
+
+			socket.emit('change_status',{
+				status:status_user
+			});
+		});
+
+	 var arr = []; // List of users
+
 	$(document).on('click', '.msg_head', function() {
 		var chatbox = $(this).parents().attr("rel") ;
 		$('[rel="'+chatbox+'"] .msg_wrap').slideToggle('slow');
@@ -65,41 +74,73 @@ $(document).ready(function () {
 		return false;
 	});
 
-	$(document).on('click', '#sidebar-user-box', function() {
-
-	 var userID = $(this).attr("class");
-	 var username = $(this).children().text() ;
-
+	function private_chatbox(username,userID)
+    {
 	 if ($.inArray(userID, arr) != -1)
 	 {
       arr.splice($.inArray(userID, arr), 1);
      }
 
 	 arr.unshift(userID);
-	 chatPopup =  '<div class="msg_box" style="right:270px" rel="'+ userID+'">'+
+	 chatPopup =  '<div class="msg_box box'+userID+'" style="right:270px" rel="'+userID+'">'+
 					'<div class="msg_head">'+username +
 					'<div class="close">x</div> </div>'+
 					'<div class="msg_wrap"> <div class="msg_body">	<div class="msg_push"></div> </div>'+
-					'<div class="msg_footer"><textarea class="msg_input" rows="4"></textarea></div> 	</div> 	</div>' ;
+					'<div class="msg_footer"><span class="broadcast"></span><textarea class="msg_input" rows="3"></textarea></div> 	</div> 	</div>' ;
 
-     $("body").append(  chatPopup  );
-	 displayChatBox();
+      $("body").append(  chatPopup  );
+	  displayChatBox();
+	}
+
+
+	$(document).on('click', '#sidebar-user-box', function() {
+		var userID = $(this).attr("uid");
+	   var username = $(this).children().text() ;
+	   private_chatbox(username,'user_'+userID);
+
+	});
+
+    socket.on('receive_private_message', function (data) {
+        console.log(data);
+		if(!$('.msg_box').hasClass('box'+data.from_uid))
+        {
+		 private_chatbox(data.username,data.from_uid);
+        }
+			$('.box'+data.from_uid+' .broadcast').html('');
+
+        if (data.whois == 'user_'+user_id ) {
+
+            $('<div class="msg-right">'+data.username+':'+data.message+'</div>').insertBefore('[rel="'+data.from_uid+'"] .msg_push');
+        } else {
+            $('<div class="msg-left">'+data.username+':'+data.message+'</div>').insertBefore('[rel="'+data.from_uid+'"] .msg_push');
+        }
+		$('.msg_body').scrollTop($('.msg_body')[0].scrollHeight);
 	});
 
 
 	$(document).on('keypress', 'textarea' , function(e) {
+        var chatbox = $(this).parents().parents().parents().attr("rel");
         if (e.keyCode == 13 ) {
-            var msg = $(this).val();
+         var msg = $(this).val();
 			$(this).val('');
 			if(msg.trim().length != 0){
-			var chatbox = $(this).parents().parents().parents().attr("rel") ;
-			$('<div class="msg-right">'+msg+'</div>').insertBefore('[rel="'+chatbox+'"] .msg_push');
-			$('.msg_body').scrollTop($('.msg_body')[0].scrollHeight);
+                socket.emit('send_private_message', {
+                    message: msg,
+                    to: chatbox,
+                });
 			}
+        } else {
+            socket.emit('broadcasting_private', {
+                username: username,
+                to: chatbox,
+            });
         }
     });
 
+    socket.on('new_broadcasting', (data) => {
 
+			$('.box'+data.from+' .broadcast').html('<span style="font-size:10px;float:left">'+data.username+'</span> <img class="pull-right" src="'+typingurl+'" />');
+    });
 
 	function displayChatBox(){
 	    i = 270 ; // start position
